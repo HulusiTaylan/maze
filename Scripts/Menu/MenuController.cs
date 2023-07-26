@@ -19,8 +19,23 @@ public class MenuController : MonoBehaviour
     public CanvasGroup bgImg;
     public CanvasGroup characterPanel;
     public List<CharactersClass> characterList;
+    public Transform startPoint; // karakterin baþlangýç pozisyonu
+    public Transform centerPoint; // karakterin orta pozisyonu 
+    public Transform exitPoint; //karakterin çýkýþ pozistonu 
+    int selectCharID;
+    public Button marketLeftBt;
+    public Button marketRightBt;
+    public Text playerNameTxt;
+    public GameObject buyBtObj;
+    public GameObject selectBtObj;
+    public Text buyTxt; // oyuncunun fiyatý yazacak 
+    int selectedPlayerID; //seçilen oyuncunun id'si
+    
     void Start()
     {
+        selectedPlayerID = PlayerPrefs.GetInt("SelectedPlayer");
+        buyBtObj.GetComponent<Button>().onClick.AddListener(buyButtonOnClick);
+        marketLeftBt.interactable = false;
         characterPanel.gameObject.SetActive(false);
         characterPanel.alpha = 0;
 
@@ -135,6 +150,28 @@ public class MenuController : MonoBehaviour
         }).SetDelay(.5f);
         playButton.DOScale(1.1f, 1f).SetLoops(-1, LoopType.Yoyo);
         ButtonGroup.DOLocalMoveY(-224f, 1f).SetEase(Ease.OutBounce).SetDelay(.5f);
+
+        CharacterControl();
+    }
+    public void CharacterControl()
+    {
+        if (!PlayerPrefs.HasKey("Character0")) // hafýzada böyle bir deðper var mý ? yoksa;
+        {
+            PlayerPrefs.SetInt("Character0", 1);  // kilit açmak için 1 e set ettik 
+        }
+        for (int i = 0; i < characterList.Count; i++) // karakter listesi kadar i döndür
+        {
+            if (PlayerPrefs.GetInt("Character" + i) == 0)
+            {
+                characterList[i].isLocked = true; // i==0 ise karakteri kitledik. 0.yý 1 e setlediðimizx için o açýk olacak 
+            }
+            else
+            {
+                characterList[i].isLocked = false; // kilit açýlý 
+
+            }
+            characterList[i].player.position = new Vector3(startPoint.position.x, characterList[i].player.position.y, characterList[i].player.position.z);// start pointin x ine götürdük ama karakterin y ve z pozisyonunu koruduk 
+        }
     }
     public void marketButtonClick()
     {
@@ -142,9 +179,85 @@ public class MenuController : MonoBehaviour
             bgImg.gameObject.SetActive(false);
             characterPanel.gameObject.SetActive(true);
             characterPanel.DOFade(1f, .5f);
+            characterList[0].player.DOMoveX(centerPoint.position.x, 1f);
         });//resmin alpha deðerini 0'a çektik 0.5 sn içinde.
-
+        getPlayerInfo(); // burda da çaðýrdýk ki market butonuna týklandýðý gibi isimler gelsin.
     }
+    public void marketrightclick()
+    {
+        marketLeftBt.interactable = true;
+        characterList[selectCharID].player.DOMoveX(exitPoint.position.x, 1f); // seçili ýd li karakteri haraket ettirdik sonra alttaki if ile ýd yi 1 arttýrdýk sonra bi alttaki ifin üstünden devam ettik 
+        if (selectCharID < characterList.Count - 1) // ýd tanýmladýk karakter listesinin sayýsýndan -1 çýakrdýk ki charlistin sayýsýndan fazla olmadý
+        {
+            selectCharID++;
+        }
+        characterList[selectCharID].player.DOMoveX(centerPoint.position.x, 1f); // id artýnca yeni id ye eþit olan karakteri ortaya çektik 
+        if (selectCharID == characterList.Count-1)
+        {
+            marketRightBt.interactable = false;
+        }
+        getPlayerInfo(); //kaydýrýnca charýn ismi deðiþsin 
+    }
+    public void marketleftclick()
+    {
+        marketRightBt.interactable = true;
+        characterList[selectCharID].player.DOMoveX(startPoint.position.x, 1f);
+        if (selectCharID > 0)
+        {
+            selectCharID--;
+        }
+        characterList[selectCharID].player.DOMoveX(centerPoint.position.x, 1f);
+        if (selectCharID == 0)
+        {
+            marketLeftBt.interactable = false;
+        }
+        getPlayerInfo();
+    }
+    void getPlayerInfo()
+    {
+        playerNameTxt.text = characterList[selectCharID].name;
+        if (characterList[selectCharID].isLocked) // oyuncu kilitli mi?
+        {
+            buyBtObj.SetActive(true);
+            buyTxt.text = "BUY - $" + characterList[selectCharID].price;
+            selectBtObj.SetActive(false);
+        }
+        else
+        {
+            buyBtObj.SetActive(false);
+            if (selectCharID== selectedPlayerID) { // seçili çarýn ýd si playera eþit olunca elect butonunu kaldýrdýk. çünkü zaten karakteri seçmiþ oluyoruz
+                selectBtObj.SetActive(false);
+            }
+            else
+            {
+                selectBtObj.SetActive(true);
+            }
+            
+        }
+    }
+    public void buyButtonOnClick()
+    {
+        if (money >= characterList[selectCharID].price)// param satýn almaya yetiyorsa
+        {
+            buyBtObj.SetActive(false);
+            selectedPlayerID = selectCharID;
+            PlayerPrefs.SetInt("SelectedPlayer", selectedPlayerID);
+            money -= characterList[selectCharID].price; // parayý azalttýk.
+            PlayerPrefs.SetInt("totalMoney", money);
+            moneytxt.text = money.ToString() + "$";
+            moneytxt.transform.DOScale(new Vector3(1.1f, 1.1f), .5f).OnComplete(() =>
+            {
+                moneytxt.transform.DOScale(new Vector3(1f, 1f), .5f).SetDelay(.2f);
+            });
+            characterList[selectCharID].isLocked = false;
+            PlayerPrefs.SetInt("Character" + selectCharID, 1);
+         }
+        else
+        {
+            //TODO : para yetersiz ise kýrmýzý yanýp sönsün
+        }
+
+    }       
     public void marketBackClick()
     {
         characterPanel.DOFade(0f, .5f).OnComplete(() => {
@@ -183,12 +296,15 @@ public class MenuController : MonoBehaviour
     [System.Serializable] // classýn inspector ekranýnda görülmesini saðlayan komut.
     public class CharactersClass
     {
-        public int id;
         public string name;
+        public int id;    
         public int price;
         public float speed;
-        public float maxHealth;
-
+        public float health;  //saðlýk
+        public int Level = 1; // default olarak 1. levelden baþlasýn 
+        public int maxLevel; // seviyenin ulaþabileceði max deðer
+        public bool isLocked; // karakterin kilitli olup olmadýðýný kontrol etmek için deðiþken 
+        public Transform player; // oyuncunun transformu
     }
 
 }
